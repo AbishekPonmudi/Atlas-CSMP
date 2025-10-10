@@ -1,0 +1,1 @@
+from config.dbConfig import get_config

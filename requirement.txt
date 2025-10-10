@@ -1,0 +1,7 @@
+mysql-connector-python
+boto3
+logging
+helpers
+aws-helpers
+python-dotenv
+tabulate
