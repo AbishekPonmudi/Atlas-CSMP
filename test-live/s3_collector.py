@@ -41,7 +41,6 @@ def get_s3_config_details(aws_config, callback):
                 "ACL": None
             }
 
-            # Get bucket policy
             try:
                 policy_response = s3.get_bucket_policy(Bucket=name)
                 bucket_data["Policy"] = json.loads(policy_response['Policy'])
@@ -51,13 +50,11 @@ def get_s3_config_details(aws_config, callback):
                 else:
                     bucket_data["Policy"] = f"Error: {e.response['Error']['Message']}"
 
-            # Get ACL
             try:
                 bucket_data["ACL"] = s3.get_bucket_acl(Bucket=name)
             except ClientError as e:
                 bucket_data["ACL"] = f"Error: {e.response['Error']['Message']}"
 
-            # Get encryption
             try:
                 encryption = s3.get_bucket_encryption(Bucket=name)
                 bucket_data["Encryption"] = encryption.get("ServerSideEncryptionConfiguration", {})
@@ -66,22 +63,18 @@ def get_s3_config_details(aws_config, callback):
                     bucket_data["Encryption"] = None
                 else:
                     bucket_data["Encryption"] = f"Error: {e.response['Error']['Message']}"
-
-            # Get MFA Delete
             try:
                 versioning = s3.get_bucket_versioning(Bucket=name)
                 bucket_data["MFADelete"] = versioning.get("MFADelete", "Disabled")
             except ClientError as e:
                 bucket_data["MFADelete"] = f"Error: {e.response['Error']['Message']}"
 
-            # Get access logging
             try:
                 logging = s3.get_bucket_logging(Bucket=name)
                 bucket_data["AccessLogging"] = bool(logging.get("LoggingEnabled"))
             except ClientError as e:
                 bucket_data["AccessLogging"] = f"Error: {e.response['Error']['Message']}"
 
-            # Get public access block
             try:
                 block_config = s3.get_public_access_block(Bucket=name)
                 bucket_data["BlockPublicAccess"] = block_config.get("PublicAccessBlockConfiguration", {})
@@ -100,7 +93,6 @@ def get_s3_config_details(aws_config, callback):
 
 if __name__ == "__main__":
     
-    # this is for testing purpose
     
     def print_results(err, buckets):
         if err:

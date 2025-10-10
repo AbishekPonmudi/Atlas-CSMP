@@ -1,5 +1,5 @@
-# This piece of code is belongs to Scybers and this code is done without using Any generative models
-# copyrights@scybers
+# This piece of code is belongs to havox and this code is done without using Any generative models
+# copyrights@havox
 
 import json
 from datetime import datetime, timedelta

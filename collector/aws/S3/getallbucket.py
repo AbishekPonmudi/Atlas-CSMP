@@ -25,8 +25,7 @@ def get_bucket_policy(AWSconfig, callback):
         bucket_data_list = []
         for bucket in buckets:
             name = bucket['Name']
-            
-            # to get the bucket region if not use the default configuration data
+            # debugginh part 
             try:
                 location = s3.get_bucket_location(Bucket=name).get('LocationConstraint',AWSconfig['region'])
                 location = location or AWSconfig['region']
@@ -43,9 +42,7 @@ def get_bucket_policy(AWSconfig, callback):
                 "Policy": None,
                 "ACL": None
             }
-            
-            #get bucket policy data
-            
+                        
             try:
                 policy_response = s3.get_bucket_policy(Bucket=name)
                 bucket_data['Policy'] = json.loads(policy_response['Policy'])
@@ -55,13 +52,11 @@ def get_bucket_policy(AWSconfig, callback):
                 else:
                     bucket_data["Policy"] = f"error : {e.response['Error']['Message']}"
                     
-            # Get ACL
             try:
                 bucket_data["ACL"] = s3.get_bucket_acl(Bucket=name)
             except ClientError as e:
                 bucket_data["ACL"] = f"Error: {e.response['Error']['Message']}"
 
-            # Get encryption
             try:
                 encryption = s3.get_bucket_encryption(Bucket=name)
                 bucket_data["Encryption"] = encryption.get("ServerSideEncryptionConfiguration", {})
@@ -71,21 +66,18 @@ def get_bucket_policy(AWSconfig, callback):
                 else:
                     bucket_data["Encryption"] = f"Error: {e.response['Error']['Message']}"
 
-            # Get MFA Delete
             try:
                 versioning = s3.get_bucket_versioning(Bucket=name)
                 bucket_data["MFADelete"] = versioning.get("MFADelete", "Disabled")
             except ClientError as e:
                 bucket_data["MFADelete"] = f"Error: {e.response['Error']['Message']}"
 
-            # Get access logging
             try:
                 logging = s3.get_bucket_logging(Bucket=name)
                 bucket_data["AccessLogging"] = bool(logging.get("LoggingEnabled"))
             except ClientError as e:
                 bucket_data["AccessLogging"] = f"Error: {e.response['Error']['Message']}"
 
-            # Get public access block
             try:
                 block_config = s3.get_public_access_block(Bucket=name)
                 bucket_data["BlockPublicAccess"] = block_config.get("PublicAccessBlockConfiguration", {})

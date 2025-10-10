@@ -6,17 +6,10 @@ import json
 STATUS_STR = ['PASS', 'WARN', 'FAIL', 'ERROR']
 
 class EC2MisconfigChecker:
-    """
-    Evaluates EC2 posture for:
-      • Public exposure, IAM roles, storage encryption, logging/monitoring,
-        patch baseline, SSH keys, lifecycle, and more.
-    Produces results with Status ∈ {PASS, WARN, FAIL, ERROR}.
-    """
 
     def __init__(self):
         self.results = []
 
-        # Remediation catalogue (indexed by status)
         self.remediation = {
             'public_ip': {
                 0: "No action needed – instance is not directly reachable from the Internet.",
@@ -126,17 +119,14 @@ class EC2MisconfigChecker:
             "Remediation": self.remediation[check][status]
         })
 
-    # --------------------- individual check helpers ---------------- #
     def _check_public_and_sg(self, inst):
         iid = inst["InstanceId"]
 
-        # region A – public IP
         if inst.get("PublicIp"):
             self._add('public_ip', 2, "Instance has a public IPv4 address", iid)
         else:
             self._add('public_ip', 0, "Instance has no public IP", iid)
 
-        # region B – wide-open SG
         wide_open = False
         harmless  = True
         for sg in inst.get("SecurityGroups", []):
@@ -153,7 +143,6 @@ class EC2MisconfigChecker:
         else:
             self._add('sg_open', 0, "Ingress rules are restricted", iid)
 
-        # region C – orphaned Elastic IP
         if inst.get("ElasticIpAllocation") and not inst.get("PublicIp"):
             self._add('elastic_ip', 1, "Elastic IP allocated but not associated", inst['ElasticIpAllocation'])
         else:
@@ -186,13 +175,11 @@ class EC2MisconfigChecker:
     def _check_storage(self, inst, vols, amis, snap_by_vol):
         iid = inst["InstanceId"]
 
-        # ----- EBS
         for vid in inst.get("Volumes", []):
             enc = vols.get(vid, {}).get("Encrypted")
             self._add('ebs_encrypt', 2 if enc is False else 0,
                       "Volume not encrypted" if enc is False else "Encrypted", vid)
 
-            # snapshots of that volume
             for snap in snap_by_vol.get(vid, []):
                 enc_s = snap.get("Encrypted", False)
                 pub   = snap.get("Public", False)
@@ -201,7 +188,6 @@ class EC2MisconfigChecker:
                 else:
                     self._add('snapshot_encrypt', 0, "Snapshot protected", snap["SnapshotId"])
 
-        # ----- AMI
         aid = inst.get("ImageId")
         ami = amis.get(aid, {})
         if ami == {}:
@@ -215,7 +201,6 @@ class EC2MisconfigChecker:
         iid = inst["InstanceId"]
         vpc = inst.get("VpcId")
 
-        # Flow Logs
         if vpc is None:
             self._add('flowlogs', 3, "Instance has no VPC? – cannot evaluate", iid)
         elif flow_map.get(vpc):
@@ -223,7 +208,6 @@ class EC2MisconfigChecker:
         else:
             self._add('flowlogs', 1, "Flow Logs disabled for VPC", vpc)
 
-        # Detailed monitoring
         detailed = inst.get("Monitoring") == "enabled"
         self._add('detailed_monitor', 0 if detailed else 1,
                   "1-minute metrics enabled" if detailed else "Using 5-minute basic metrics", iid)
@@ -233,7 +217,6 @@ class EC2MisconfigChecker:
         aid = inst.get("ImageId")
         ami = amis.get(aid, {})
 
-        # AMI freshness
         try:
             created = datetime.strptime(ami.get("CreationDate", "1970-01-01"), "%Y-%m-%dT%H:%M:%S.%fZ")
             days_old = (datetime.utcnow() - created).days
@@ -251,7 +234,6 @@ class EC2MisconfigChecker:
             desc   = "Unable to parse AMI creation date"
         self._add('outdated_ami', status, desc, iid)
 
-        # SSM fleet
         managed = iid in ssm_managed
         self._add('ssm_managed', 0 if managed else 1,
                   "SSM managed" if managed else "Not registered in SSM", iid)
@@ -285,7 +267,6 @@ class EC2MisconfigChecker:
         if reg not in allowed_regions:
             self._add('unused_instance', 2, f"Running in disallowed region {reg}", iid)
 
-    # ------------------ orchestrator ------------------------------- #
     def run(self, cache, settings, callback):
         try:
             data   = cache.get('ec2', {})
@@ -299,7 +280,6 @@ class EC2MisconfigChecker:
             key_pairs = data.get("KeyPairs", [])
             allowed_regions = settings.get("allowed_regions", [settings["region"]])
 
-            # build helpers
             snap_by_vol = defaultdict(list)
             for s in snaps:
                 if s.get("VolumeId"):
@@ -307,7 +287,6 @@ class EC2MisconfigChecker:
 
             flow_map = {f.get("ResourceId"): True for f in flow}
 
-            # CloudTrail global (fail/warn handled in collector-agnostic way)
             if data.get("Trails"):
                 self._add('cloudtrail', 0, "CloudTrail trails found")
             else:

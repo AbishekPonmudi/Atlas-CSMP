@@ -58,7 +58,6 @@ def collect_and_check_ec2(aws_cfg):
                 cat   = CATEGORY_MAP.get(check, "General")
                 res   = r.get("Resource", "")
                 region = ""
-                # Try to extract region from resource or use fallback
                 for inst in data.get("Instances", []):
                     if inst.get("InstanceId") == res or inst.get("KeyName") == res or inst.get("ImageId") == res:
                         region = inst.get("Region")

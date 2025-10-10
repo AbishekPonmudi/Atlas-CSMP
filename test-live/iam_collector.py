@@ -21,8 +21,6 @@ def get_iam_config_details(aws_config, callback):
             aws_secret_access_key=aws_config.get('secret_key'),
             region_name=aws_config.get('region')
         )
-
-        # Password policy
         try:
             pwd_policy = iam.get_account_password_policy()['PasswordPolicy']
         except ClientError as e:
@@ -31,20 +29,17 @@ def get_iam_config_details(aws_config, callback):
             else:
                 pwd_policy = f"Error: {e.response['Error']['Message']}"
 
-        #Account summary (for root MFA)
         try:
             acct_summary = iam.get_account_summary()['SummaryMap']
         except ClientError:
             acct_summary = {}
 
-        # Generate + fetch credential report
         users_report = {}
         try:
             iam.generate_credential_report()
             report = None
             for _ in range(10):
                 rep = iam.get_credential_report()
-                # use .get() to avoid KeyError if 'State' is missing
                 if rep.get('State') == 'COMPLETE' and 'Content' in rep:
                     report = rep
                     break
@@ -58,23 +53,19 @@ def get_iam_config_details(aws_config, callback):
         except ClientError:
             users_report = {}
 
-        # List users
         users = []
         paginator = iam.get_paginator('list_users')
         for page in paginator.paginate():
             for u in page['Users']:
                 uname = u['UserName']
-                # MFA devices
                 try:
                     mfas = iam.list_mfa_devices(UserName=uname)['MFADevices']
                 except ClientError:
                     mfas = []
-                # Access keys
                 try:
                     aks = iam.list_access_keys(UserName=uname)['AccessKeyMetadata']
                 except ClientError:
                     aks = []
-                # Inline policies
                 try:
                     inames = iam.list_user_policies(UserName=uname)['PolicyNames']
                     inline = {
@@ -83,7 +74,6 @@ def get_iam_config_details(aws_config, callback):
                     }
                 except ClientError:
                     inline = {}
-                # Attached policies
                 try:
                     attached = iam.list_attached_user_policies(UserName=uname)['AttachedPolicies']
                 except ClientError:
@@ -98,18 +88,15 @@ def get_iam_config_details(aws_config, callback):
                     'CredentialReport': users_report.get(uname, {})
                 })
 
-        # 5) List roles
         roles = []
         paginator = iam.get_paginator('list_roles')
         for page in paginator.paginate():
             for r in page['Roles']:
                 rname = r['RoleName']
-                # Trust policy
                 try:
                     trust_doc = iam.get_role(RoleName=rname)['Role']['AssumeRolePolicyDocument']
                 except ClientError:
                     trust_doc = {}
-                # Inline
                 try:
                     rnames = iam.list_role_policies(RoleName=rname)['PolicyNames']
                     inline = {
@@ -118,7 +105,6 @@ def get_iam_config_details(aws_config, callback):
                     }
                 except ClientError:
                     inline = {}
-                # Attached
                 try:
                     attached = iam.list_attached_role_policies(RoleName=rname)['AttachedPolicies']
                 except ClientError:

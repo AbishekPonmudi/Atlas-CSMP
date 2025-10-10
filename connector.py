@@ -1,12 +1,10 @@
 #This is the connector module for AWS configuration and database connection management.
 # This module handles the configuration of AWS credentials and manages the connection to a database for storing these credentials.
-# connector.py
 
 import getpass
 import config.dbConfig as dbConfig
 import main
 
-# Connector configuration for AWS
 
 def aws_config_creds():
     

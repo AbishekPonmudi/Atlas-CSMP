@@ -1,5 +1,5 @@
-# This piece of code is belongs to Scybers and this code is done without using Any generative models
-# copyrights@scybers
+# This piece of code is belongs to havox and this code is done without using Any generative models
+# copyrights@havox
 
 import argparse
 import connector
@@ -189,7 +189,7 @@ def main():
         dbConfig.db_connection(cloud_config['access_key'], cloud_config['secret_key'], cloud_config['region'], True)
         print(f"{GREEN}[+] Configuration initialized successfully.{RESET}")
     elif db_set is True:
-        print(f"{GREEN}[+] Scybers CSPM Tool started successfully.{RESET}")
+        print(f"{GREEN}[+] havox CSPM Tool started successfully.{RESET}")
     # time.sleep(1)
 
     AWSconfig = dbConfig.get_config()
@@ -197,7 +197,7 @@ def main():
         print(f"{RED}[-] No configuration found. Please run 'aws config' to set up AWS credentials.{RESET}")
         return
 
-    print(f"\n{CYAN}[*] Starting Scybers CSPM Assessment...{RESET}\n")
+    print(f"\n{CYAN}[*] Starting havox CSPM Assessment...{RESET}\n")
     
     total_checks = [0]  # Shared total checks across all services
     scan_results = []
@@ -243,7 +243,7 @@ def main():
 
     print_overview_results(AWSconfig, scan_results, status_counts)
 
-    print(f"\n{CYAN}[*] Starting Scybers CSPM Shell (Type 'help' for commands){RESET}")
+    print(f"\n{CYAN}[*] Starting havox CSPM Shell (Type 'help' for commands){RESET}")
 
     press_count = 1
 
@@ -363,7 +363,7 @@ def handle_command(command, AWSconfig):
 
     elif command in ['help', 'h']:
         print(f"""
-{CYAN}=== Scybers CSPM Command's ===
+{CYAN}=== havox CSPM Command's ===
 {YELLOW}- aws config       : Re-configure AWS credentials
 - scan s3          : Scan S3 buckets
 - scan iam         : Scan IAM resources
@@ -377,14 +377,14 @@ def handle_command(command, AWSconfig):
 - help             : Show this help message{RESET}
 """)
     elif command in ['exit', 'quit', '!q']:
-        print(f"{YELLOW}[*] Exiting Scybers CSPM Tool...{RESET}")
+        print(f"{YELLOW}[*] Exiting havox CSPM Tool...{RESET}")
         exit(0)
     else:
         print(f"{RED}[!] Unknown command: '{command}'. Type 'help' for assistance.{RESET}")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Scybers CSPM Tool')
-    parser.add_argument('--version', action='version', version='Scybers CSPM Tool v1.1')
+    parser = argparse.ArgumentParser(description='havox CSPM Tool')
+    parser.add_argument('--version', action='version', version='havox CSPM Tool v1.1')
     args = parser.parse_args()
     clear_src()
     print_header()

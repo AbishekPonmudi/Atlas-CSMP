@@ -42,9 +42,7 @@ def get_ec2_config_details(aws_cfg: dict, callback):
                 aws_session_token=aws_cfg.get("session_token"),
                 region_name=reg)
 
-        # ------------------------------------------------------------------ #
-        # 1) CloudTrail & Flow-logs                                          #
-        # ------------------------------------------------------------------ #
+
         try:
             trails = ct.describe_trails(includeShadowTrails=True)["trailList"]
         except ClientError:
@@ -56,9 +54,6 @@ def get_ec2_config_details(aws_cfg: dict, callback):
         except ClientError:
             pass
 
-        # ------------------------------------------------------------------ #
-        # 2) SSM managed instances                                           #
-        # ------------------------------------------------------------------ #
         ssm_managed = []
         try:
             paginator = ssm.get_paginator("describe_instance_information")
@@ -66,18 +61,10 @@ def get_ec2_config_details(aws_cfg: dict, callback):
                 ssm_managed.extend([i["InstanceId"] for i in page["InstanceInformationList"]])
         except ClientError:
             pass
-
-        # ------------------------------------------------------------------ #
-        # 3) Key pairs                                                       #
-        # ------------------------------------------------------------------ #
         try:
             key_pairs = ec2.describe_key_pairs()["KeyPairs"]
         except ClientError:
             key_pairs = []
-
-        # ------------------------------------------------------------------ #
-        # 4) Instances (+ vols / SG / IAM role)                              #
-        # ------------------------------------------------------------------ #
         instances     = []
         all_volume_ids = set()
         role_names     = set()
@@ -92,11 +79,9 @@ def get_ec2_config_details(aws_cfg: dict, callback):
                     vpc   = inst.get("VpcId")
                     vpc_ids.add(vpc)
 
-                    # public exposure
                     pub_ip  = inst.get("PublicIpAddress")
                     eip_allocation = inst.get("NetworkInterfaces", [{}])[0].get("Association", {}).get("AllocationId")
 
-                    # security groups + ingress rules snapshot
                     sg_info = []
                     for sg in inst.get("SecurityGroups", []):
                         try:
@@ -105,7 +90,6 @@ def get_ec2_config_details(aws_cfg: dict, callback):
                         except ClientError:
                             sg_info.append({"GroupId": sg["GroupId"], "Error": "Could not retrieve"})
 
-                    # instance-profile role(s)
                     roles = []
                     if "IamInstanceProfile" in inst:
                         ip_arn = inst["IamInstanceProfile"]["Arn"]
@@ -116,7 +100,6 @@ def get_ec2_config_details(aws_cfg: dict, callback):
                         except ClientError:
                             pass
 
-                    # block-devices → volumes
                     vols = [bdm["Ebs"]["VolumeId"] for bdm in inst.get("BlockDeviceMappings", []) if "Ebs" in bdm]
                     all_volume_ids.update(vols)
 
@@ -140,9 +123,6 @@ def get_ec2_config_details(aws_cfg: dict, callback):
                     if inst.get("ImageId"):
                         ami_ids.add(inst["ImageId"])
 
-        # ------------------------------------------------------------------ #
-        # 5) Volume encryption                                               #
-        # ------------------------------------------------------------------ #
         volumes = {}
         if all_volume_ids:
             for i in range(0, len(all_volume_ids), 200):
@@ -156,9 +136,6 @@ def get_ec2_config_details(aws_cfg: dict, callback):
                 except ClientError:
                     pass
 
-        # ------------------------------------------------------------------ #
-        # 6) Snapshot metadata (encryption/share)                            #
-        # ------------------------------------------------------------------ #
         snapshots = []
         try:
             paginator = ec2.get_paginator("describe_snapshots")
@@ -173,9 +150,6 @@ def get_ec2_config_details(aws_cfg: dict, callback):
         except ClientError:
             pass
 
-        # ------------------------------------------------------------------ #
-        # 7) AMI details                                                     #
-        # ------------------------------------------------------------------ #
         amis = {}
         if ami_ids:
             try:
@@ -188,9 +162,6 @@ def get_ec2_config_details(aws_cfg: dict, callback):
             except ClientError:
                 pass
 
-        # ------------------------------------------------------------------ #
-        # 8) IAM role policy documents (for least-privilege scan)           #
-        # ------------------------------------------------------------------ #
         policy_cache = {}
         def get_managed_doc(arn):
             if arn in policy_cache:
