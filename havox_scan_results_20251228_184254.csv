@@ -1,0 +1,18 @@
+Category,Check,Description,Resource,Status,Remediation
+S3,Bucket Check,No buckets found,-,INFO,No remediation needed
+IAM,password_policy,No password policy found,,ERROR,"Enforce at least one uppercase, lowercase, number, and symbol."
+IAM,root_mfa,Root MFA is enabled,,PASS,No action needed. Root MFA enabled.
+IAM,user_mfa,No MFA devices for user abishek,abishek,FAIL,Require MFA on IAM user.
+IAM,wildcard_permissions,No wildcard perms for abishek,abishek,PASS,No wildcard (*) permissions found.
+IAM,user_mfa,No MFA devices for user production_testing,production_testing,FAIL,Require MFA on IAM user.
+IAM,access_key_age,Access key AKIA27NAAMXYHIXMEOVK age 0 days,production_testing,PASS,No action needed. Access key age is within 90 days.
+IAM,wildcard_permissions,No wildcard perms for production_testing,production_testing,PASS,No wildcard (*) permissions found.
+IAM,user_mfa,No MFA devices for user vignesh,vignesh,FAIL,Require MFA on IAM user.
+IAM,wildcard_permissions,No wildcard perms for vignesh,vignesh,PASS,No wildcard (*) permissions found.
+IAM,role_trust,Trust policy is restricted for role AWSServiceRoleForResourceExplorer,AWSServiceRoleForResourceExplorer,PASS,No wildcard trust principals.
+IAM,wildcard_permissions,No wildcard perms for AWSServiceRoleForResourceExplorer,AWSServiceRoleForResourceExplorer,PASS,No wildcard (*) permissions found.
+IAM,role_trust,Trust policy is restricted for role AWSServiceRoleForSupport,AWSServiceRoleForSupport,PASS,No wildcard trust principals.
+IAM,wildcard_permissions,No wildcard perms for AWSServiceRoleForSupport,AWSServiceRoleForSupport,PASS,No wildcard (*) permissions found.
+IAM,role_trust,Trust policy is restricted for role AWSServiceRoleForTrustedAdvisor,AWSServiceRoleForTrustedAdvisor,PASS,No wildcard trust principals.
+IAM,wildcard_permissions,No wildcard perms for AWSServiceRoleForTrustedAdvisor,AWSServiceRoleForTrustedAdvisor,PASS,No wildcard (*) permissions found.
+EC2,EC2 Instances,No EC2 instances found in this region/account,-,INFO,No action needed

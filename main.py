@@ -1,5 +1,5 @@
-# This piece of code is belongs to havox and this code is done without using Any generative models
-# copyrights@havox
+# This piece of code is belongs to Atlas and this code is done without using Any generative models
+# copyrights@Atlas
 
 import argparse
 import connector
@@ -16,6 +16,7 @@ from config.get_resource import AWSResourceCounter
 from datetime import datetime
 import questionary
 import threading
+from scan_reports.report_exporter import export_csv
 
 # ANSI color codes
 GREEN = "\033[92m"
@@ -53,7 +54,7 @@ def auto_scan_scheduler():
     while True:
         try:
             with SCAN_LOCK:
-                print(f"\n{YELLOW}[*] Auto scan triggered...{RESET}")
+                # print(f"\n{YELLOW}[*] Auto scan triggered...{RESET}")
                 AWSconfig = dbConfig.get_config()
                 global scan_result_cache, status_count_cache
                 scan_result_cache = []
@@ -72,7 +73,7 @@ def auto_scan_scheduler():
                 print_overview_results(AWSconfig, scan_result_cache, status_count_cache)
 
                 # temp prompt fix
-                print(f"{GREEN}[havox@CSPM]$> {RESET}", end="", flush=True)
+                print(f"\n{GREEN}[Atlas@CSPM]$> {RESET}", end="", flush=True)
 
         except Exception as e:
             print(f"{RED}[!] Auto scan failed: {e}{RESET}")
@@ -106,15 +107,15 @@ def print_progress_bar(iteration, total, status_counts=None, service_name=None):
 
 def print_header():
     print("\n")
-    print(f"{BLUE}  ██╗  ██╗ █████╗ ██╗   ██╗ ██████╗ ██╗  ██╗ {RESET}")
-    print(f"{BLUE}  ██║  ██║██╔══██╗╚██╗ ██╔╝██╔═══██╗██║  ██║ {RESET}")
-    print(f"{BLUE}  ███████║███████║ ╚████╔╝ ██║   ██║███████║ {RESET}")
-    print(f"{BLUE}  ██╔══██║██╔══██║  ╚██╔╝  ██║   ██║██╔══██║ {RESET}")
-    print(f"{BLUE}  ██║  ██║██║  ██║   ██║   ╚██████╔╝██║  ██║ {RESET}")
-    print(f"{BLUE}  ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝ {RESET}")
-    print(f"{CYAN}                    === Atlas CLoud scanner CLI Tool v1.0.3 === {RESET}")
-    print(f"{CYAN}           The comprehensive cloud security assessment tool {RESET}")
-    print(f"{CYAN}                     Copyright © 2025 Havox.vercel.com {RESET}")
+    print(f"{BLUE}   █████╗ ████████╗██╗      █████╗ ███████╗ {RESET}")
+    print(f"{BLUE}  ██╔══██╗╚══██╔══╝██║     ██╔══██╗██╔════╝ {RESET}")
+    print(f"{BLUE}  ███████║   ██║   ██║     ███████║███████╗ {RESET}")
+    print(f"{BLUE}  ██╔══██║   ██║   ██║     ██╔══██║╚════██║ {RESET}")
+    print(f"{BLUE}  ██║  ██║   ██║   ███████╗██║  ██║███████║ {RESET}")
+    print(f"{BLUE}  ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝ {RESET}")
+    print(f"{CYAN}                 === Atlas Cloud Scanner CLI Tool v1.0.3 === {RESET}")
+    print(f"{CYAN}        The comprehensive cloud security assessment tool {RESET}")
+    print(f"{CYAN}                  Copyright © 2025 atlas.site {RESET}")
 
 
 def print_service_summary(service_name, results):
@@ -124,6 +125,79 @@ def print_service_summary(service_name, results):
     headers = ["Category", "Check", "Description", "Resource", "Status", "Remediation"]
     data = [[r["Category"], r["Check"], r["Description"], r["Resource"], print_colored_status(r["Status"]), r["Remediation"]] for r in results]
     print(tabulate(data, headers=headers, tablefmt="fancy_grid"))
+
+def run_single_service_scan(service, AWSconfig):
+    local_results = []
+    local_total = [0]
+    local_status = {
+        "PASS": 0,
+        "FAIL": 0,
+        "HIGH": 0,
+        "INFO": 0,
+        "MUTED": 0,
+        "ERROR": 0,
+        "WARN": 0
+    }
+    
+    ESTIMATED_TOTAL = {
+        "s3": 100,
+        "iam": 150,
+        "ec2": 120,
+        "scan all": 370
+    }.get(service, 100)
+
+    print('\n')
+    print_progress_bar(0, ESTIMATED_TOTAL, local_status, service.upper())
+    print('\n')
+
+    def local_progress(checks, counts):
+        try:
+            checks = int(checks or 0)
+            local_total[0] += checks
+
+            for k, v in (counts or {}).items():
+                local_status[k] = local_status.get(k, 0) + int(v or 0)
+
+            print_progress_bar(
+                local_total[0],
+                ESTIMATED_TOTAL,
+                local_status,
+                service.upper()
+            )
+        except Exception:
+            pass
+
+    def local_progress(checks, counts):
+        local_total[0] += int(checks or 0)
+
+    if service == "s3":
+        s3_functions.collect_and_check_bucket(
+            AWSconfig, local_results, local_progress
+        )
+        print_service_summary("S3", local_results)
+
+    elif service == "iam":
+        iam_functions.collect_and_check_iam(
+            AWSconfig, local_results, local_progress
+        )
+        print_service_summary("IAM", local_results)
+
+    elif service == "ec2":
+        ec2_helper.collect_and_check_ec2(
+            AWSconfig, local_results, local_progress
+        )
+        print_service_summary("EC2", local_results)
+
+    elif service == "scan all":
+        s3_functions.collect_and_check_bucket(AWSconfig, local_results, local_progress)
+        iam_functions.collect_and_check_iam(AWSconfig, local_results, local_progress)
+        ec2_helper.collect_and_check_ec2(AWSconfig, local_results, local_progress)
+        services = list(service_map.keys())
+        for svc in services:
+            if svc not in service_map:
+                continue
+            print_service_summary(service_map[svc], [r for r in local_results if r.get("Category") == service_map[svc]])
+
 
 def print_overview_results(config, scan_results, status_counts_global=None):
     s3_results = [r for r in scan_results if r.get("Category") == "S3"]
@@ -237,7 +311,7 @@ def main():
         dbConfig.db_connection(cloud_config['access_key'], cloud_config['secret_key'], cloud_config['region'], True)
         print(f"{GREEN}[+] Configuration initialized successfully.{RESET}")
     elif db_set is True:
-        print(f"{GREEN}[+] havox CSPM Tool started successfully.{RESET}")
+        print(f"{GREEN}[+] Atlas CSPM Tool started successfully.{RESET}")
     # time.sleep(1)
 
     AWSconfig = dbConfig.get_config()
@@ -245,7 +319,7 @@ def main():
         print(f"{RED}[-] No configuration found. Please run 'aws config' to set up AWS credentials.{RESET}")
         return
 
-    print(f"\n{CYAN}[*] Starting havox CSPM Assessment...{RESET}\n")
+    print(f"\n{CYAN}[*] Starting Atlas CSPM Assessment...{RESET}\n")
     # CLI_READY = True
     
     total_checks = [0]  # Shared total checks across all services
@@ -288,18 +362,18 @@ def main():
     scan_result_cache = scan_results
     status_count_cache = status_counts
 
-    time.sleep(1)  # Sync time
+    time.sleep(1)
 
     print_overview_results(AWSconfig, scan_results, status_counts)
 
-    print(f"\n{CYAN}[*] Starting havox CSPM Shell (Type 'help' for commands){RESET}")
+    print(f"\n{CYAN}[*] Starting Atlas CSPM Shell (Type 'help' for commands){RESET}")
 
     CLI_READY = True
     press_count = 1
 
     while True:
         try:
-            command = input(f"{GREEN}[havox@CSPM]$> {RESET}").strip().lower()
+            command = input(f"{GREEN}[Atlas@CSPM]$> {RESET}").strip().lower()
             if command:
                 handle_command(command, AWSconfig,scan_results,update_progress)
                 continue
@@ -319,6 +393,8 @@ service_map = {
 
 def handle_command(command, AWSconfig,scan_results, update_progress ):
     command = command.lower()
+
+    
     
     if command == 'cloud config':
         print("\n")
@@ -331,6 +407,7 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
             "Githb"
                 ]
             ).ask()
+        print('\n')
 
         provider_option = picked_opt_config.lower()
 
@@ -377,45 +454,53 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
                     "back"
                 ]
             ).ask()
-        
+        print('\n')
         option_picker = picked_opt.lower()
 
         if picked_opt == "back":
             return
 
-        print("+[DEBUG] -> option_picker")
+        # print("+[DEBUG] -> option_picker")
 
         if option_picker == "aws":
             sub_options = questionary.select(
-                f"{BLUE}Available scan's{RESET}",
+                "Available scan's",
                 choices = [
                     "storage",
                     "Identity & Access Control",
                     "compute",
                     "network",
                     "Monitoring & Governance",
+                    "Scan all Resources",
                     "back"
                 ]
             ).ask()
             
-            if sub_options == 'storage':
-                s3_functions.collect_and_check_bucket(AWSconfig, scan_results, update_progress)
-            elif sub_options == 'Identity & Access Control':
-                iam_functions.collect_and_check_iam(AWSconfig, scan_results, update_progress)
+            if sub_options == 'Identity & Access Control':
+                run_single_service_scan("iam", AWSconfig)
+
+            elif sub_options == 'storage':
+                run_single_service_scan("s3", AWSconfig)
+
             elif sub_options == 'compute':
-                ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
+                run_single_service_scan("ec2", AWSconfig)
+            
+            elif sub_options == 'Scan all Resources':
+                run_single_service_scan("scan all", AWSconfig)
+
             elif sub_options == 'back':
                 return
 
         if option_picker == "azure":
             sub_options = questionary.select(
-                f"{BLUE}Available scan's{RESET}",
+                "Available scan's",
                 choices = [
                     "storage",
                     "Identity & Access Control",
                     "compute",
                     "network",
                     "Monitoring & Governance",
+                    "Scan all Resources",
                     "back"
                 ]
             ).ask()
@@ -427,19 +512,20 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
             elif picked_opt == 'vm':
                 ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
 
-        # return picked_opt
+    elif command == "reset config":
+        dbConfig.truncate_client_table()
 
-    elif command == 'download result':
-        print("Yet to implement...")
+    elif command in ["export csv", "download csv", "get report"]:
+        export_csv(scan_result_cache)
 
     elif command.startswith('scan'):
         if not AWSconfig:
-            print(f"{RED}[-] Configuration missing. Run 'aws config' first.{RESET}")
+            print(f"{RED}[-] Configuration missing. Run 'cloud config' first.{RESET}")
             return
         if command == 'scan':
             print("Service info needed >> use help")
         
-        if command.strip() == 'scan all':
+        if command.strip() == 'Scan all Resources':
             services = list(service_map.keys())
     
         else:
@@ -501,27 +587,28 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
 
     elif command in ['help', 'h']:
         print(f"""
-{CYAN}=== havox CSPM Command's ===
+{CYAN}=== Atlas CSPM Command's ===
 {YELLOW}
 - cloud config                          : Scan S3 buckets
 - config provider you have              : Use Arrow to navigate
 - cloud scan all                        : Scan all cloud Provider configured
 - cloud status                          : List the overall compliance status with checks with Frameworks
 - status                                : Check Atlas status (Looking for uses)
-- download report                       : download csv or json report
+- export csv                            : download csv or json report
+- reset config                          : Remove all you current CSPM config include Providers
 - reboot, restart                       : initiate rescan manually
 - exit / quit / !q                      : Exit the tool
 - help                                  : Show this help message{RESET}
 """)
     elif command in ['exit', 'quit', '!q']:
-        print(f"{YELLOW}[*] Exiting havox CSPM Tool...{RESET}")
+        print(f"{YELLOW}[*] Exiting Atlas CSPM Tool...{RESET}")
         exit(0)
     else:
         print(f"{RED}[!] Unknown command: '{command}'. Type 'help' for assistance.{RESET}")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='havox CSPM Tool')
-    parser.add_argument('--version', action='version', version='havox CSPM Tool v1.1')
+    parser = argparse.ArgumentParser(description='Atlas CSPM Tool')
+    parser.add_argument('--version', action='version', version='Atlas CSPM Tool v1.1')
     args = parser.parse_args()
 
     clear_src()

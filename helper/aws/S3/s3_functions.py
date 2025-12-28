@@ -6,7 +6,7 @@ def collect_and_check_bucket(AWS_config, scan_results, check_callback):
     def after_check(err, results, meta):
         nonlocal total_checks
         if err:
-            print(f"[check] Error: {err}")
+            # print(f"[check] Error: {err}")
             return
 
         if not results:
@@ -52,7 +52,7 @@ def collect_and_check_bucket(AWS_config, scan_results, check_callback):
 
     def after_collect(err, buckets):
         if err:
-            print(f"[collect] Error: {err}")
+            # print(f"[collect] Error: {err}")
             return
         
         if not buckets:
