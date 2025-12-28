@@ -14,6 +14,8 @@ import sys
 import config
 from config.get_resource import AWSResourceCounter
 from datetime import datetime
+import questionary
+import threading
 
 # ANSI color codes
 GREEN = "\033[92m"
@@ -23,6 +25,11 @@ RESET = "\033[0m"
 BLUE = "\033[94m"
 CYAN = "\033[96m"
 GREY = "\033[90m"
+
+AUTO_SCAN_DURATION = 600 #10 min
+AUTO_SCAN_MODE = False
+CLI_READY = False
+SCAN_LOCK = threading.Lock()
 
 def print_colored_status(status):
     if status == "PASS":
@@ -36,6 +43,42 @@ def print_colored_status(status):
     elif status == "MUTED" or status == "ERROR":
         return f"{YELLOW}{status}{RESET}"
     return status
+
+def auto_scan_scheduler():
+    while not CLI_READY:
+        time.sleep(1)
+
+    time.sleep(AUTO_SCAN_DURATION)
+
+    while True:
+        try:
+            with SCAN_LOCK:
+                print(f"\n{YELLOW}[*] Auto scan triggered...{RESET}")
+                AWSconfig = dbConfig.get_config()
+                global scan_result_cache, status_count_cache
+                scan_result_cache = []
+                status_count_cache = {
+                    "PASS": 0, 
+                    "FAIL": 0,
+                    "HIGH": 0,
+                    "INFO": 0,
+                    "MUTED": 0, 
+                    "ERROR": 0, 
+                    "WARN": 0
+                }
+                s3_functions.collect_and_check_bucket(AWSconfig, scan_result_cache, lambda *_: None)
+                iam_functions.collect_and_check_iam(AWSconfig, scan_result_cache, lambda *_: None)
+                ec2_helper.collect_and_check_ec2(AWSconfig, scan_result_cache, lambda *_: None)
+                print_overview_results(AWSconfig, scan_result_cache, status_count_cache)
+
+                # temp prompt fix
+                print(f"{GREEN}[havox@CSPM]$> {RESET}", end="", flush=True)
+
+        except Exception as e:
+            print(f"{RED}[!] Auto scan failed: {e}{RESET}")
+
+        time.sleep(AUTO_SCAN_DURATION)
+
 
 def clear_src():
     if os.name == 'nt':
@@ -69,7 +112,7 @@ def print_header():
     print(f"{BLUE}  ██╔══██║██╔══██║  ╚██╔╝  ██║   ██║██╔══██║ {RESET}")
     print(f"{BLUE}  ██║  ██║██║  ██║   ██║   ╚██████╔╝██║  ██║ {RESET}")
     print(f"{BLUE}  ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝ {RESET}")
-    print(f"{CYAN}                    === Havox CLoud scanner CLI Tool v1.0.1 === {RESET}")
+    print(f"{CYAN}                    === Atlas CLoud scanner CLI Tool v1.0.3 === {RESET}")
     print(f"{CYAN}           The comprehensive cloud security assessment tool {RESET}")
     print(f"{CYAN}                     Copyright © 2025 Havox.vercel.com {RESET}")
 
@@ -105,29 +148,36 @@ def print_overview_results(config, scan_results, status_counts_global=None):
     print(f"\n{YELLOW}\n=== Scan Overview ({start_time.strftime('%Y-%m-%d %I:%M %p IST')}) ==={RESET}")
     headers = ["Provider", "Service", "Status", "Critical", "High", "Passed", "Low", "Muted"]
     data = [
-        ["aws", "S3", print_colored_status(s3_status), 
+        ["aws", "Storage", print_colored_status(s3_status), 
          f"{RED}{s3_critical}{RESET}" if s3_critical > 0 else s3_critical, 
          f"{YELLOW}{s3_high}{RESET}" if s3_high > 0 else s3_high, 
          f"{GREEN}{s3_medium}{RESET}" if s3_medium > 0 else s3_medium, 
          f"{BLUE}{s3_low}{RESET}" if s3_low > 0 else s3_low, 
          f"{CYAN}{s3_muted}{RESET}" if s3_muted > 0 else s3_muted],
-        ["aws", "IAM", print_colored_status(iam_status), 
+        ["aws", "Identity/Access Control", print_colored_status(iam_status), 
          f"{RED}{iam_critical}{RESET}" if iam_critical > 0 else iam_critical, 
          f"{YELLOW}{iam_high}{RESET}" if iam_high > 0 else iam_high, 
          f"{GREEN}{iam_medium}{RESET}" if iam_medium > 0 else iam_medium, 
          f"{BLUE}{iam_low}{RESET}" if iam_low > 0 else iam_low, 
          f"{CYAN}{iam_muted}{RESET}" if iam_muted > 0 else iam_muted],
-        ["aws", "EC2", print_colored_status(ec2_status), 
+        ["aws", "compute", print_colored_status(ec2_status), 
          f"{RED}{ec2_critical}{RESET}" if ec2_critical > 0 else ec2_critical, 
          f"{YELLOW}{ec2_high}{RESET}" if ec2_high > 0 else ec2_high, 
          f"{GREEN}{ec2_medium}{RESET}" if ec2_medium > 0 else ec2_medium, 
          f"{BLUE}{ec2_low}{RESET}" if ec2_low > 0 else ec2_low, 
          f"{CYAN}{ec2_muted}{RESET}" if ec2_muted > 0 else ec2_muted],
-        ["aws", "CloudFormation", "INFO (Dev)..."], 
-        ["aws", "lambda", "INFO (Dev)..."], 
-        ["aws", "cloudWatch", "INFO (Dev)..."], 
-        ["aws", "config", "INFO (Dev)..."], 
-        ["aws", "cloudTrail", "INFO (Dev)..."], 
+        ["aws ", "network", print_colored_status(0), 
+        f"{RED}{ec2_critical}{RESET}" if ec2_critical > 0 else ec2_critical, 
+         f"{YELLOW}{ec2_high}{RESET}" if ec2_high > 0 else ec2_high, 
+         f"{GREEN}{ec2_medium}{RESET}" if ec2_medium > 0 else ec2_medium, 
+         f"{BLUE}{ec2_low}{RESET}" if ec2_low > 0 else ec2_low, 
+         f"{CYAN}{ec2_muted}{RESET}" if ec2_muted > 0 else ec2_muted], 
+        ["aws ", "Monitoring & Governance", print_colored_status(0),
+         f"{RED}{ec2_critical}{RESET}" if ec2_critical > 0 else ec2_critical, 
+         f"{YELLOW}{ec2_high}{RESET}" if ec2_high > 0 else ec2_high, 
+         f"{GREEN}{ec2_medium}{RESET}" if ec2_medium > 0 else ec2_medium, 
+         f"{BLUE}{ec2_low}{RESET}" if ec2_low > 0 else ec2_low, 
+         f"{CYAN}{ec2_muted}{RESET}" if ec2_muted > 0 else ec2_muted], 
     ]
     print(tabulate(data, headers=headers, tablefmt="fancy_grid"))
     
@@ -174,14 +224,12 @@ def print_overview_results(config, scan_results, status_counts_global=None):
 # For cache 
 scan_result_cache = []
 status_count_cache = {"PASS": 0, "FAIL": 0, "HIGH": 0, "INFO": 0, "MUTED": 0, "ERROR": 0, "WARN": 0}
-
-
 account_id = None
 
 s1 = AWSResourceCounter()
 
 def main():
-    
+    global CLI_READY
     db_set = dbConfig.get_config_status()
     if db_set is False or db_set is None:
         print(f"{YELLOW}[*] Initializing configuration...{RESET}")
@@ -198,6 +246,7 @@ def main():
         return
 
     print(f"\n{CYAN}[*] Starting havox CSPM Assessment...{RESET}\n")
+    # CLI_READY = True
     
     total_checks = [0]  # Shared total checks across all services
     scan_results = []
@@ -231,7 +280,7 @@ def main():
     global account_id
     account_id = dbConfig.get_account_name()
 
-    print_progress_bar(total_checks[0], estimated_total, status_counts)
+    # print_progress_bar(total_checks[0], estimated_total, status_counts)
 
     # Update cache
     global scan_result_cache
@@ -245,13 +294,14 @@ def main():
 
     print(f"\n{CYAN}[*] Starting havox CSPM Shell (Type 'help' for commands){RESET}")
 
+    CLI_READY = True
     press_count = 1
 
     while True:
         try:
-            command = input(f"{GREEN}[scyber@CSPM]$> {RESET}").strip().lower()
+            command = input(f"{GREEN}[havox@CSPM]$> {RESET}").strip().lower()
             if command:
-                handle_command(command, AWSconfig)
+                handle_command(command, AWSconfig,scan_results,update_progress)
                 continue
         except KeyboardInterrupt:
             press_count += press_count
@@ -260,29 +310,51 @@ def main():
                 break
             else:
                 continue
-
-
+            
 service_map = {
     's3': 'S3',
     'iam': 'IAM',
     'ec2': 'EC2'
 }
 
-def handle_command(command, AWSconfig):
+def handle_command(command, AWSconfig,scan_results, update_progress ):
     command = command.lower()
     
-    if command == 'aws config':
-        print(f"{YELLOW}[*] Re-configuring AWS credentials...{RESET}")
-        cloud_config = connector.aws_config_creds()
-        dbConfig.db_connection(cloud_config['access_key'], cloud_config['secret_key'], cloud_config['region'], True)
-        print(f"{GREEN}[+] Credentials updated successfully.{RESET}")
+    if command == 'cloud config':
+        print("\n")
+        picked_opt_config = questionary.select(
+            "Available Providers:",
+            choices = [
+            "Azure",
+            "AWS",
+            "GCP",
+            "Githb"
+                ]
+            ).ask()
+
+        provider_option = picked_opt_config.lower()
+
+        if provider_option == 'azure':
+            return "under dev...."
+        
+        elif provider_option == 'aws':
+            print(f"{YELLOW}[*] Re-configuring AWS credentials...{RESET}")
+            cloud_config = connector.aws_config_creds()
+            dbConfig.db_connection(cloud_config['access_key'], cloud_config['secret_key'], cloud_config['region'], True)
+            print(f"{GREEN}[+] Credentials updated successfully.{RESET}")
+
+        elif provider_option == 'github':
+            return "under dev...."
+        
+        elif provider_option == 'gcp':
+            return "under dev...."
 
     elif command == 'status':
         print(f"{GREEN}[+] Fetching status...{RESET}")
         if dbConfig.status_verify():
-            print(f"{GREEN}[+] CSPM is active and operational.{RESET}")
+            print(f"{GREEN}[+] Atlas is active and operational.{RESET}")
         else:
-            print(f"{RED}[-] CSPM is inactive. Run 'aws config' to activate.{RESET}")
+            print(f"{RED}[-] Atals is inactive. Run 'config' to activate.{RESET}")
 
     elif command == 'cloud status':
         print_overview_results(AWSconfig, scan_result_cache, status_count_cache)
@@ -292,7 +364,71 @@ def handle_command(command, AWSconfig):
         time.sleep(2)
         print(f"{RED}[*]{RESET}{GREEN}starting all service may take some time{RESET}\n")
         main()
-    
+
+    elif command == "cloud scan":
+        print("\n")
+        picked_opt = questionary.select(
+                "Available scan's",
+                choices = [
+                    "AWS",
+                    "Azure",
+                    "GCP",
+                    "Github",
+                    "back"
+                ]
+            ).ask()
+        
+        option_picker = picked_opt.lower()
+
+        if picked_opt == "back":
+            return
+
+        print("+[DEBUG] -> option_picker")
+
+        if option_picker == "aws":
+            sub_options = questionary.select(
+                f"{BLUE}Available scan's{RESET}",
+                choices = [
+                    "storage",
+                    "Identity & Access Control",
+                    "compute",
+                    "network",
+                    "Monitoring & Governance",
+                    "back"
+                ]
+            ).ask()
+            
+            if sub_options == 'storage':
+                s3_functions.collect_and_check_bucket(AWSconfig, scan_results, update_progress)
+            elif sub_options == 'Identity & Access Control':
+                iam_functions.collect_and_check_iam(AWSconfig, scan_results, update_progress)
+            elif sub_options == 'compute':
+                ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
+            elif sub_options == 'back':
+                return
+
+        if option_picker == "azure":
+            sub_options = questionary.select(
+                f"{BLUE}Available scan's{RESET}",
+                choices = [
+                    "storage",
+                    "Identity & Access Control",
+                    "compute",
+                    "network",
+                    "Monitoring & Governance",
+                    "back"
+                ]
+            ).ask()
+
+            if picked_opt == 'entra ID':
+                s3_functions.collect_and_check_bucket(AWSconfig, scan_results, update_progress)
+            elif picked_opt == 'blob stg':
+                iam_functions.collect_and_check_iam(AWSconfig, scan_results, update_progress)
+            elif picked_opt == 'vm':
+                ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
+
+        # return picked_opt
+
     elif command == 'download result':
         print("Yet to implement...")
 
@@ -305,6 +441,7 @@ def handle_command(command, AWSconfig):
         
         if command.strip() == 'scan all':
             services = list(service_map.keys())
+    
         else:
             raw = command.replace('scan', '').strip()
             services = [s.strip() for s in raw.split(',') if s.strip()]
@@ -332,6 +469,7 @@ def handle_command(command, AWSconfig):
 
         print_progress_bar(0, estimated_total, status_counts, service_map.get(services[0]) if services else None)
         sys.stdout.flush()
+
 
         for svc in services:
             if svc not in service_map:
@@ -364,17 +502,16 @@ def handle_command(command, AWSconfig):
     elif command in ['help', 'h']:
         print(f"""
 {CYAN}=== havox CSPM Command's ===
-{YELLOW}- aws config       : Re-configure AWS credentials
-- scan s3          : Scan S3 buckets
-- scan iam         : Scan IAM resources
-- scan ec2         : Scan EC2 instances
-- scan s3.....     : Scan multiple services e.g(scan iam, s3, ec2 ....)
-- scan all         : Scan all supported services
-- cloud status     : List the overall compliance status with checks with Frameworks
-- status           : Check CSPM status
-- reboot, restart  : initiate rescan manually
-- exit / quit / !q : Exit the tool
-- help             : Show this help message{RESET}
+{YELLOW}
+- cloud config                          : Scan S3 buckets
+- config provider you have              : Use Arrow to navigate
+- cloud scan all                        : Scan all cloud Provider configured
+- cloud status                          : List the overall compliance status with checks with Frameworks
+- status                                : Check Atlas status (Looking for uses)
+- download report                       : download csv or json report
+- reboot, restart                       : initiate rescan manually
+- exit / quit / !q                      : Exit the tool
+- help                                  : Show this help message{RESET}
 """)
     elif command in ['exit', 'quit', '!q']:
         print(f"{YELLOW}[*] Exiting havox CSPM Tool...{RESET}")
@@ -386,6 +523,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='havox CSPM Tool')
     parser.add_argument('--version', action='version', version='havox CSPM Tool v1.1')
     args = parser.parse_args()
+
     clear_src()
     print_header()
+
+    threading.Thread(
+        target=auto_scan_scheduler,
+        daemon = True
+    ).start()
+
     main()
