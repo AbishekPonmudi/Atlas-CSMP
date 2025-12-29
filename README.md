@@ -444,7 +444,7 @@ We welcome contributions! Please follow these guidelines:
 
 1. **Fork the Repository**
    ```bash
-   git fork https://github.com/AbishekPonmudi/infrastructure_scanner_for_cloud.git
+   git fork https://github.com/AbishekPonmudi/Atlas-CSMP.git
    ```
 
 2. **Create a Feature Branch**
