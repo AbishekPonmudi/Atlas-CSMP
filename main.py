@@ -93,15 +93,20 @@ def print_progress_bar(iteration, total, status_counts=None, service_name=None):
         total = float(str(total)) if total is not None else 1.0
         if total <= 0:
             total = 1.0
+
         percent = min(100.0, round(100.0 * (iteration / total), 1))
-        filled_length = int(50.0 * (iteration / total)) if total > 0 else 0
+        filled_length = min(50, int(50.0 * (iteration / total)))
+        filled_length = max(0, filled_length)
+        
         bar = f"{GREEN}▰{RESET}" * filled_length + f"{GREY}▱{RESET}" * (50 - filled_length)
         service_label = f" [{service_name}]" if service_name else ""
+        
         sys.stdout.write(f"\rProgress{service_label}: |{bar}| {percent}% Completed")
         sys.stdout.flush()
+        # if percent >= 100.0 and iteration >= total:
+        #     full_bar = f"{GREEN}▰{RESET}" * 50
+        #     print(f"\rProgress{service_label}: |{full_bar}| 100% Completed")
 
-        if float(iteration) >= float(total) and iteration == total:
-            print(f"\rProgress{service_label}: |{bar}| 100% Completed\n")
     except (ValueError, TypeError) as e:
         print(f"Error in print_progress_bar: {e}, iteration={iteration}, total={total}, types=(iteration: {type(iteration)}, total: {type(total)})")
 
@@ -124,12 +129,14 @@ def print_service_summary(service_name, results):
         return
     headers = ["Category", "Check", "Description", "Resource", "Status", "Remediation"]
     data = [[r["Category"], r["Check"], r["Description"], r["Resource"], print_colored_status(r["Status"]), r["Remediation"]] for r in results]
+    print()
     print(tabulate(data, headers=headers, tablefmt="fancy_grid"))
 
 def run_single_service_scan(service, AWSconfig):
-    local_results = []
-    local_total = [0]
-    local_status = {
+    scan_results = []
+    total_checks = [0]
+    finished = [False]
+    status_counts = {
         "PASS": 0,
         "FAIL": 0,
         "HIGH": 0,
@@ -138,65 +145,62 @@ def run_single_service_scan(service, AWSconfig):
         "ERROR": 0,
         "WARN": 0
     }
-    
-    ESTIMATED_TOTAL = {
-        "s3": 100,
-        "iam": 150,
-        "ec2": 120,
-        "scan all": 370
-    }.get(service, 100)
+    estimated_total = {
+        "s3": 10,
+        "iam": 15,
+        "ec2": 12,
+        "scan all": 37
+    }.get(service, 50)
 
-    print('\n')
-    print_progress_bar(0, ESTIMATED_TOTAL, local_status, service.upper())
-    print('\n')
+    print_progress_bar(0, estimated_total, status_counts, service.upper())
 
-    def local_progress(checks, counts):
+    def update_progress(checks, counts):
         try:
-            checks = int(checks or 0)
-            local_total[0] += checks
+            inc = int(checks) if checks else 1
+            total_checks[0] += inc
 
-            for k, v in (counts or {}).items():
-                local_status[k] = local_status.get(k, 0) + int(v or 0)
+            for k, v in counts.items():
+                status_counts[k] += int(v or 0)
 
-            print_progress_bar(
-                local_total[0],
-                ESTIMATED_TOTAL,
-                local_status,
-                service.upper()
-            )
-        except Exception:
-            pass
+            if total_checks[0] >= estimated_total:
+                finished[0] = True
 
-    def local_progress(checks, counts):
-        local_total[0] += int(checks or 0)
+            print_progress_bar(min(total_checks[0], estimated_total),estimated_total,status_counts,service.upper())
+            sys.stdout.flush()
+
+        except Exception as e:
+            print(f"Progress error: {e}")
 
     if service == "s3":
-        s3_functions.collect_and_check_bucket(
-            AWSconfig, local_results, local_progress
-        )
-        print_service_summary("S3", local_results)
+        s3_functions.collect_and_check_bucket(AWSconfig, scan_results, update_progress)
 
     elif service == "iam":
-        iam_functions.collect_and_check_iam(
-            AWSconfig, local_results, local_progress
-        )
-        print_service_summary("IAM", local_results)
+        iam_functions.collect_and_check_iam(AWSconfig, scan_results, update_progress)
 
     elif service == "ec2":
-        ec2_helper.collect_and_check_ec2(
-            AWSconfig, local_results, local_progress
-        )
-        print_service_summary("EC2", local_results)
+        ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
 
     elif service == "scan all":
-        s3_functions.collect_and_check_bucket(AWSconfig, local_results, local_progress)
-        iam_functions.collect_and_check_iam(AWSconfig, local_results, local_progress)
-        ec2_helper.collect_and_check_ec2(AWSconfig, local_results, local_progress)
-        services = list(service_map.keys())
-        for svc in services:
-            if svc not in service_map:
-                continue
-            print_service_summary(service_map[svc], [r for r in local_results if r.get("Category") == service_map[svc]])
+        s3_functions.collect_and_check_bucket(AWSconfig, scan_results, update_progress)
+        iam_functions.collect_and_check_iam(AWSconfig, scan_results, update_progress)
+        ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
+
+    if not finished[0]:
+        print_progress_bar(
+            estimated_total,
+            estimated_total,
+            status_counts,
+            service.upper()
+        )
+        print()
+
+    if service == "scan all":
+        for svc, category in service_map.items():
+            svc_results = [r for r in scan_results if r.get("Category") == category]
+            print_service_summary(category, svc_results)
+    else:
+        name = "S3" if service == "s3" else "IAM" if service == "iam" else "EC2"
+        print_service_summary(name, scan_results)
 
 
 def print_overview_results(config, scan_results, status_counts_global=None):
@@ -279,7 +283,7 @@ def print_overview_results(config, scan_results, status_counts_global=None):
     low_percentage = round((low / total_checks  * 100),2) if total_checks > 0 else 0.0
    
     print(tabulate(data, headers=headers, tablefmt="fancy_grid"))   
-    print(f"\n{YELLOW}=== CIS Benchmark Compliance Status ==={RESET}")
+    print(f"\n{YELLOW}=== CIS/NIST Benchmark Compliance Status ==={RESET}")
     compliance_data = [
         [f"{BLUE}Total Resource{RESET}",f"{BLUE}{actual_resource}{RESET}"],
         [f"{RED}Non-Compliance{RESET}",f"{RED}{calculate_percent(failed,total_checks)}{RESET}"],
@@ -326,20 +330,16 @@ def main():
     scan_results = []
     status_counts = {"PASS": 0, "FAIL": 0, "HIGH": 0, "INFO": 0, "MUTED": 0, "ERROR": 0, "WARN": 0}
 
-    estimated_total = 600
+    estimated_total = 20
     print_progress_bar(total_checks[0], estimated_total, status_counts)
 
     def update_progress(checks, counts):
-        
         try:
-            checks = int(float(str(checks))) if checks is not None else 0
+            checks = int(checks or 0)
             total_checks[0] += checks
-            for status, count in counts.items():
-                status_counts[status] = status_counts.get(status, 0) + int(float(str(count))) if count is not None else 0
-            
-            current_checks = total_checks[0]
-            print_progress_bar(current_checks, estimated_total, status_counts)
-            sys.stdout.flush() 
+            for status, count in (counts or {}).items():
+                status_counts[status] = status_counts.get(status, 0) + int(count or 0)
+            print_progress_bar(total_checks[0], estimated_total, status_counts)
         except (ValueError, TypeError) as e:
             print(f"Process Bar issue {e}, checks={checks}, counts={counts}, total_checks={total_checks[0]}")
     
@@ -394,12 +394,10 @@ service_map = {
 def handle_command(command, AWSconfig,scan_results, update_progress ):
     command = command.lower()
 
-    
-    
     if command == 'cloud config':
         print("\n")
         picked_opt_config = questionary.select(
-            "Available Providers:",
+            "+[INFO] Available/Selected Providers:",
             choices = [
             "Azure",
             "AWS",
@@ -445,7 +443,7 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
     elif command == "cloud scan":
         print("\n")
         picked_opt = questionary.select(
-                "Available scan's",
+                "+[INFO] Available/Selected Provider: ",
                 choices = [
                     "AWS",
                     "Azure",
@@ -454,7 +452,6 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
                     "back"
                 ]
             ).ask()
-        print('\n')
         option_picker = picked_opt.lower()
 
         if picked_opt == "back":
@@ -464,7 +461,7 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
 
         if option_picker == "aws":
             sub_options = questionary.select(
-                "Available scan's",
+                "+[INFO] Available/Selected scan's",
                 choices = [
                     "storage",
                     "Identity & Access Control",
@@ -475,6 +472,7 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
                     "back"
                 ]
             ).ask()
+            print()
             
             if sub_options == 'Identity & Access Control':
                 run_single_service_scan("iam", AWSconfig)
@@ -493,7 +491,7 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
 
         if option_picker == "azure":
             sub_options = questionary.select(
-                "Available scan's",
+                "+[INFO] Available scan's",
                 choices = [
                     "storage",
                     "Identity & Access Control",
@@ -536,7 +534,7 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
         scan_results = []
         total_checks = [0]
         status_counts = {"PASS": 0, "FAIL": 0, "HIGH": 0, "INFO": 0, "MUTED": 0, "ERROR": 0, "WARN": 0}
-        estimated_total = 100 if 's3' in services else 100 if 'iam' in services else 100
+        estimated_total = 10 if 's3' in services else 10 if 'iam' in services else 100
 
         def update_progress(checks, counts):
             try:
@@ -589,13 +587,13 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
         print(f"""
 {CYAN}=== Atlas CSPM Command's ===
 {YELLOW}
-- cloud config                          : Scan S3 buckets
+- cloud config                          : Configure your cloud provider
 - config provider you have              : Use Arrow to navigate
 - cloud scan all                        : Scan all cloud Provider configured
 - cloud status                          : List the overall compliance status with checks with Frameworks
-- status                                : Check Atlas status (Looking for uses)
+- status                                : Check Atlas status (Checking status)
 - export csv                            : download csv or json report
-- reset config                          : Remove all you current CSPM config include Providers
+- reset config                          : Remove and reset all your current CSPM config include Providers
 - reboot, restart                       : initiate rescan manually
 - exit / quit / !q                      : Exit the tool
 - help                                  : Show this help message{RESET}

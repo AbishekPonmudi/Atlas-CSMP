@@ -1,4 +1,6 @@
 dev.env
+production-env/
+venv/
 *.pyc
 __pycache__/
 havox_scan_results_*.csv
