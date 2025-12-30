@@ -29,6 +29,8 @@ RESET = "\033[0m"
 BLUE = "\033[94m"
 CYAN = "\033[96m"
 GREY = "\033[90m"
+ORANGE = "\033[38;5;208m"
+
 
 AUTO_SCAN_DURATION = 600 #10 min
 AUTO_SCAN_MODE = False
@@ -517,12 +519,12 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
     elif command == "reset config":
         dbConfig.truncate_client_table()
 
-    elif command in ["export csv", "download csv", "get report"]:
+    elif command in ["export cloud csv", "download cloud csv", "get cloud report"]:
         export_csv(scan_result_cache)
 
     elif command == "iac scan":
         location = input(f"{YELLOW}[*] Location: {RESET}").strip() or "."
-        severity_input = input("Minimum severity (CRITICAL/HIGH/MEDIUM/WARN) [optional]: ").strip()
+        severity_input = input(f"{YELLOW}[*] Minimum severity {RESET} {ORANGE}(CRITICAL/HIGH/MEDIUM/WARN){RESET} {YELLOW}[optional]:{RESET} ").strip()
         severity = severity_input.upper() if severity_input else None
 
         if severity and severity not in ["CRITICAL","HIGH","MEDIUM","WARN"]:
@@ -540,8 +542,58 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
             "stats": stats
             }
 
-    elif command == "export txt iac":
+    elif command in ["export iac txt", "download iac txt", "get iac report"]:
         export_txt(iac_scan_cache)
+
+    elif command == "auto scan set":
+        action = questionary.select(
+            "[+] Auto Scan:",
+            choices=["Enable","Disable"]
+        ).ask()
+
+        if action == "Disable":
+            global AUTO_SCAN_MODE
+            AUTO_SCAN_MODE = False
+            print(f"{RED}[+] Auto Scan Disables{RESET}")
+
+        else:
+            interval_choice = questionary.select(
+                "Select Scan Duration:",
+                choices=[
+                    "10 minutes",
+                    "30 minutes (default)",
+                    "1 Hour",
+                    "12 Hour",
+                    "24 Hour",
+                    "Custom"
+                ]
+            ).ask()
+
+            if interval_choice == "10 minutes":
+                AUTO_SCAN_DURATION = 600
+
+            elif interval_choice == "30 minutes (default)":
+                AUTO_SCAN_DURATION = 1800
+
+            elif interval_choice == "1 Hour":
+                AUTO_SCAN_DURATION = 3600
+
+            elif interval_choice == "12 Hour":
+                AUTO_SCAN_DURATION = 43200
+
+            elif interval_choice == "24 Hour":
+                AUTO_SCAN_DURATION = 86400
+
+            else:
+                AUTO_SCAN_DURATION = int(
+                    questionary.text(
+                        "interval in seconds:",
+                        validate=lambda x: x.isdigit() and int(x) > 0
+                    ).ask()
+                )
+            global AUTO_SCAN_ENABLED
+            AUTO_SCAN_ENABLED = True
+            print(f"{GREEN}[+] Auto scan enabled (interval: {AUTO_SCAN_DURATION} seconds){RESET}")
 
 #changes done
         # if command == 'scan':
@@ -615,10 +667,19 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
 {YELLOW}
 - cloud config                          : Configure your cloud provider
 - config provider you have              : Use Arrow to navigate
+- cloud scan                            : Scan Provider by selecting (for non-cloud environments)
 - cloud scan all                        : Scan all cloud Provider configured
 - cloud status                          : List the overall compliance status with checks with Frameworks
+- iac scan                              : Scan Terraform IaC files for multi-cloud security misconfigurations 
+   |                                         using CIS-aligned rules, with severity filtering and CI/CD enforcement support.
+   |_ 
+    options : Location: Must Valid locaiton of IaC Database/file path on hosted system
+    severity <LEVEL> Optional -> Minimum severity to display (CRITICAL, HIGH, MEDIUM, WARN)
 - status                                : Check Atlas status (Checking status)
-- export csv                            : download csv or json report
+- export cloud csv                      : Download csv format of Cloud Environment report
+- export iac txt                        : Exports the Infrastructure-as-Code (IaC) misconfiguration findings
+                                            from the latest scan into a text report suitable
+                                            for CI/CD pipeline auditing and compliance review.
 - reset config                          : Remove and reset all your current CSPM config include Providers
 - reboot, restart                       : initiate rescan manually
 - exit / quit / !q                      : Exit the tool
