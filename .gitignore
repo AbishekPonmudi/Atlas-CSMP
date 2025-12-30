@@ -3,6 +3,7 @@ production-env/
 venv/
 *.pyc
 __pycache__/
-havox_scan_results_*.csv
+Atlas_Cloud_scan_results_*.csv
+Atlas_Iac_scan_results_*.csv
 testing.py
  
