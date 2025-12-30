@@ -1,22 +1,25 @@
 # This piece of code is belongs to Atlas and this code is done without using Any generative models
 # copyrights@Atlas
 
+
+import os
+import sys
+import time
+import config
 import argparse
 import connector
-import time
-import os
+import threading
+import questionary
+from datetime import datetime
+from tabulate import tabulate 
 import config.dbConfig as dbConfig
+from helper.aws.EC2 import ec2_helper
 from helper.aws.S3 import s3_functions
 from helper.aws.IAM import iam_functions
-from helper.aws.EC2 import ec2_helper
-from tabulate import tabulate 
-import sys
-import config
+from helper.iac_utils.iac_scan import run_iac_scan
+from helper.iac_utils.iac_scan import OutputFormatter
 from config.get_resource import AWSResourceCounter
-from datetime import datetime
-import questionary
-import threading
-from scan_reports.report_exporter import export_csv
+from scan_supporters.report_exporter import export_csv, export_txt
 
 # ANSI color codes
 GREEN = "\033[92m"
@@ -31,6 +34,7 @@ AUTO_SCAN_DURATION = 600 #10 min
 AUTO_SCAN_MODE = False
 CLI_READY = False
 SCAN_LOCK = threading.Lock()
+iac_scan_cache = None
 
 def print_colored_status(status):
     if status == "PASS":
@@ -120,7 +124,7 @@ def print_header():
     print(f"{BLUE}  ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝ {RESET}")
     print(f"{CYAN}                 === Atlas Cloud Scanner CLI Tool v1.0.3 === {RESET}")
     print(f"{CYAN}        The comprehensive cloud security assessment tool {RESET}")
-    print(f"{CYAN}                  Copyright © 2025 atlas.site {RESET}")
+    print(f"{CYAN}                  Copyright © 2025 atlas.h4vox.site {RESET}")
 
 
 def print_service_summary(service_name, results):
@@ -509,28 +513,50 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
                 iam_functions.collect_and_check_iam(AWSconfig, scan_results, update_progress)
             elif picked_opt == 'vm':
                 ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
-
+    
     elif command == "reset config":
         dbConfig.truncate_client_table()
 
     elif command in ["export csv", "download csv", "get report"]:
         export_csv(scan_result_cache)
 
-    elif command.startswith('scan'):
-        if not AWSconfig:
-            print(f"{RED}[-] Configuration missing. Run 'cloud config' first.{RESET}")
+    elif command == "iac scan":
+        location = input(f"{YELLOW}[*] Location: {RESET}").strip() or "."
+        severity_input = input("Minimum severity (CRITICAL/HIGH/MEDIUM/WARN) [optional]: ").strip()
+        severity = severity_input.upper() if severity_input else None
+
+        if severity and severity not in ["CRITICAL","HIGH","MEDIUM","WARN"]:
+            print(f"{RED} Invalid filter {RESET}")
+
+        if not os.path.exists(location):
+            print(f"{RED}[-] Invalid Location {RESET}")
             return
-        if command == 'scan':
-            print("Service info needed >> use help")
         
-        if command.strip() == 'Scan all Resources':
-            services = list(service_map.keys())
-    
-        else:
-            raw = command.replace('scan', '').strip()
-            services = [s.strip() for s in raw.split(',') if s.strip()]
+        findings, stats, failed = run_iac_scan(location,severity)
+
+        global iac_scan_cache
+        iac_scan_cache = {
+            "findings": findings,
+            "stats": stats
+            }
+
+    elif command == "export txt iac":
+        export_txt(iac_scan_cache)
+
+#changes done
+        # if command == 'scan':
+        #     print("Service info needed >> use help")
         
-        print(f"\n{YELLOW}Starting scan...{RESET}\n")
+        # if command.strip() == 'Scan all Resources':
+        #     services = list(service_map.keys())
+
+        # else:
+        #     raw = command.replace('scan', '').strip()
+        #     services = [s.strip() for s in raw.split(',') if s.strip()]
+#changes done
+
+        # print(f"\n{YELLOW}Starting scan...{RESET}\n")
+        services = list(service_map.keys())
         scan_results = []
         total_checks = [0]
         status_counts = {"PASS": 0, "FAIL": 0, "HIGH": 0, "INFO": 0, "MUTED": 0, "ERROR": 0, "WARN": 0}
@@ -551,37 +577,37 @@ def handle_command(command, AWSconfig,scan_results, update_progress ):
             except (ValueError, TypeError) as e:
                 print(f"Error in update_progress: {e}, checks={checks}, counts={counts}, total_checks={total_checks[0]}")
 
-        print_progress_bar(0, estimated_total, status_counts, service_map.get(services[0]) if services else None)
-        sys.stdout.flush()
+        # print_progress_bar(0, estimated_total, status_counts, service_map.get(services[0]) if services else None)
+        # sys.stdout.flush()
 
 
-        for svc in services:
-            if svc not in service_map:
-                print(f"\n{RED}[!] Unknown service '{svc}'{RESET}")
+        # for svc in services:
+        #     if svc not in service_map:
+        #         print(f"\n{RED}[!] Unknown service '{svc}'{RESET}")
                 
-            try:
-                if svc == 's3':
-                    s3_functions.collect_and_check_bucket(AWSconfig, scan_results, update_progress)
-                elif svc == 'iam':
-                    iam_functions.collect_and_check_iam(AWSconfig, scan_results, update_progress)
-                elif svc == 'ec2':
-                    ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
-                else:
-                    print(f"{YELLOW}[*] Unable to find the service make sure you entered the correct service, or use help...{RESET}\n")
-                    continue
-            except KeyError as e:
-                print(f"Error code: {e}")
-                continue
+        #     try:
+        #         if svc == 's3':
+        #             s3_functions.collect_and_check_bucket(AWSconfig, scan_results, update_progress)
+        #         elif svc == 'iam':
+        #             iam_functions.collect_and_check_iam(AWSconfig, scan_results, update_progress)
+        #         elif svc == 'ec2':
+        #             ec2_helper.collect_and_check_ec2(AWSconfig, scan_results, update_progress)
+        #         else:
+        #             print(f"{YELLOW}[*] Unable to find the service make sure you entered the correct service, or use help...{RESET}\n")
+        #             continue
+        #     except KeyError as e:
+        #         print(f"Error code: {e}")
+        #         continue
 
         # Only print the final progress bar if there were checks
-        if total_checks[0] > 0:
-            print_progress_bar(total_checks[0], estimated_total, status_counts, service_map.get(services[0]) if services else None)
-            print("")
-        time.sleep(1) 
-        for svc in services:
-            if svc not in service_map:
-                continue
-            print_service_summary(service_map[svc], [r for r in scan_results if r.get("Category") == service_map[svc]])
+        # if total_checks[0] > 0:
+        #     print_progress_bar(total_checks[0], estimated_total, status_counts, service_map.get(services[0]) if services else None)
+        #     print("")
+        # time.sleep(1) 
+        # for svc in services:
+        #     if svc not in service_map:
+        #         continue
+        #     print_service_summary(service_map[svc], [r for r in scan_results if r.get("Category") == service_map[svc]])
 
     elif command in ['help', 'h']:
         print(f"""

@@ -1,0 +1,362 @@
+{
+  "aws_s3_bucket": [
+    {
+      "id": "aws-s3-public-read",
+      "severity": "CRITICAL",
+      "description": "S3 bucket allows public read access",
+      "condition": {
+        "type": "equals",
+        "attribute": "acl",
+        "value": "public-read"
+      },
+      "impact": "Bucket contents are publicly accessible, leading to data exposure",
+      "resolution": "Set ACL to 'private' or use bucket policies for specific access",
+      "cis_reference": "CIS AWS 2.1.1"
+    },
+    {
+      "id": "aws-s3-public-write",
+      "severity": "CRITICAL",
+      "description": "S3 bucket allows public write access",
+      "condition": {
+        "type": "equals",
+        "attribute": "acl",
+        "value": "public-read-write"
+      },
+      "impact": "Anyone can upload malicious content or delete data",
+      "resolution": "Set ACL to 'private' and use IAM policies for write access",
+      "cis_reference": "CIS AWS 2.1.1"
+    },
+    {
+      "id": "aws-s3-encryption-disabled",
+      "severity": "HIGH",
+      "description": "S3 bucket does not have default encryption enabled",
+      "condition": {
+        "type": "missing",
+        "attribute": "server_side_encryption_configuration"
+      },
+      "impact": "Data stored in bucket is not encrypted at rest",
+      "resolution": "Enable server-side encryption with AES-256 or KMS",
+      "cis_reference": "CIS AWS 2.1.2"
+    },
+    {
+      "id": "aws-s3-versioning-disabled",
+      "severity": "MEDIUM",
+      "description": "S3 bucket versioning is not enabled",
+      "condition": {
+        "type": "missing",
+        "attribute": "versioning"
+      },
+      "impact": "Cannot recover from accidental deletion or modification",
+      "resolution": "Enable versioning on the S3 bucket",
+      "cis_reference": "CIS AWS 2.1.3"
+    }
+  ],
+  "aws_security_group": [
+    {
+      "id": "aws-sg-unrestricted-ssh",
+      "severity": "CRITICAL",
+      "description": "Security group allows unrestricted SSH access (0.0.0.0/0)",
+      "condition": {
+        "type": "contains",
+        "attribute": "ingress.cidr_blocks",
+        "value": "0.0.0.0/0"
+      },
+      "impact": "SSH port is exposed to the entire internet, increasing brute force risk",
+      "resolution": "Restrict SSH access to specific IP addresses or use VPN",
+      "cis_reference": "CIS AWS 4.1"
+    },
+    {
+      "id": "aws-sg-unrestricted-rdp",
+      "severity": "CRITICAL",
+      "description": "Security group allows unrestricted RDP access (0.0.0.0/0)",
+      "condition": {
+        "type": "contains",
+        "attribute": "ingress.cidr_blocks",
+        "value": "0.0.0.0/0"
+      },
+      "impact": "RDP port exposed to internet allows unauthorized remote access attempts",
+      "resolution": "Restrict RDP to specific trusted IP ranges",
+      "cis_reference": "CIS AWS 4.2"
+    }
+  ],
+  "aws_alb_listener": [
+    {
+      "id": "aws-elb-http-not-used",
+      "severity": "CRITICAL",
+      "description": "ALB listener does not use HTTPS",
+      "condition": {
+        "type": "equals",
+        "attribute": "protocol",
+        "value": "HTTP"
+      },
+      "impact": "Traffic is transmitted in plaintext, exposing sensitive data",
+      "resolution": "Use HTTPS protocol with valid SSL/TLS certificates",
+      "cis_reference": "CIS AWS 2.2"
+    }
+  ],
+  "aws_elb_listener": [
+    {
+      "id": "aws-elb-http-not-used",
+      "severity": "CRITICAL",
+      "description": "ELB listener does not use HTTPS",
+      "condition": {
+        "type": "equals",
+        "attribute": "protocol",
+        "value": "HTTP"
+      },
+      "impact": "Traffic is transmitted in plaintext, exposing sensitive data",
+      "resolution": "Use HTTPS protocol with valid SSL/TLS certificates",
+      "cis_reference": "CIS AWS 2.2"
+    }
+  ],
+  "aws_db_instance": [
+    {
+      "id": "aws-rds-encryption-disabled",
+      "severity": "HIGH",
+      "description": "RDS instance does not have encryption enabled",
+      "condition": {
+        "type": "equals",
+        "attribute": "storage_encrypted",
+        "value": false
+      },
+      "impact": "Database data at rest is not encrypted",
+      "resolution": "Enable storage encryption for RDS instances",
+      "cis_reference": "CIS AWS 2.3.1"
+    },
+    {
+      "id": "aws-rds-public-access",
+      "severity": "CRITICAL",
+      "description": "RDS instance is publicly accessible",
+      "condition": {
+        "type": "equals",
+        "attribute": "publicly_accessible",
+        "value": true
+      },
+      "impact": "Database is exposed to the internet",
+      "resolution": "Set publicly_accessible to false",
+      "cis_reference": "CIS AWS 2.3.2"
+    },
+    {
+      "id": "aws-rds-backup-disabled",
+      "severity": "MEDIUM",
+      "description": "RDS instance does not have automated backups enabled",
+      "condition": {
+        "type": "equals",
+        "attribute": "backup_retention_period",
+        "value": 0
+      },
+      "impact": "Cannot recover from data loss or corruption",
+      "resolution": "Set backup_retention_period to at least 7 days",
+      "cis_reference": "CIS AWS 2.3.3"
+    }
+  ],
+  "aws_iam_role_policy": [
+    {
+      "id": "aws-iam-wildcard-actions",
+      "severity": "HIGH",
+      "description": "IAM policy contains wildcard actions (*)",
+      "condition": {
+        "type": "contains",
+        "attribute": "policy",
+        "value": "Action\":\"*\""
+      },
+      "impact": "Role has overly permissive access to all AWS services",
+      "resolution": "Use specific actions instead of wildcards",
+      "cis_reference": "CIS AWS 1.16"
+    }
+  ],
+  "azurerm_storage_account": [
+    {
+      "id": "azure-storage-public-access",
+      "severity": "CRITICAL",
+      "description": "Azure Storage Account allows public access",
+      "condition": {
+        "type": "equals",
+        "attribute": "allow_blob_public_access",
+        "value": true
+      },
+      "impact": "Storage contents are publicly accessible",
+      "resolution": "Set allow_blob_public_access to false",
+      "cis_reference": "CIS Azure 3.1"
+    },
+    {
+      "id": "azure-storage-https-only",
+      "severity": "HIGH",
+      "description": "Storage Account does not enforce HTTPS-only traffic",
+      "condition": {
+        "type": "equals",
+        "attribute": "enable_https_traffic_only",
+        "value": false
+      },
+      "impact": "Data can be transmitted over unencrypted HTTP connections",
+      "resolution": "Set enable_https_traffic_only to true",
+      "cis_reference": "CIS Azure 3.2"
+    },
+    {
+      "id": "azure-storage-encryption-disabled",
+      "severity": "HIGH",
+      "description": "Storage Account does not have encryption enabled",
+      "condition": {
+        "type": "missing",
+        "attribute": "encryption"
+      },
+      "impact": "Data at rest is not encrypted",
+      "resolution": "Enable encryption for Storage Account",
+      "cis_reference": "CIS Azure 3.3"
+    }
+  ],
+  "azurerm_network_security_group": [
+    {
+      "id": "azure-nsg-unrestricted-ssh",
+      "severity": "CRITICAL",
+      "description": "NSG allows unrestricted SSH access from internet",
+      "condition": {
+        "type": "contains",
+        "attribute": "security_rule.source_address_prefix",
+        "value": "*"
+      },
+      "impact": "SSH exposed to internet increases unauthorized access risk",
+      "resolution": "Restrict source addresses to specific IPs or ranges",
+      "cis_reference": "CIS Azure 6.1"
+    }
+  ],
+  "azurerm_sql_database": [
+    {
+      "id": "azure-sql-encryption-disabled",
+      "severity": "HIGH",
+      "description": "Azure SQL Database does not have TDE enabled",
+      "condition": {
+        "type": "missing",
+        "attribute": "transparent_data_encryption_enabled"
+      },
+      "impact": "Database files are not encrypted at rest",
+      "resolution": "Enable Transparent Data Encryption (TDE)",
+      "cis_reference": "CIS Azure 4.1.1"
+    }
+  ],
+  "azurerm_key_vault": [
+    {
+      "id": "azure-kv-public-network",
+      "severity": "HIGH",
+      "description": "Key Vault allows public network access",
+      "condition": {
+        "type": "equals",
+        "attribute": "network_acls.default_action",
+        "value": "Allow"
+      },
+      "impact": "Secrets and keys are accessible from public internet",
+      "resolution": "Set default_action to Deny and use private endpoints",
+      "cis_reference": "CIS Azure 8.1"
+    }
+  ],
+  "google_storage_bucket": [
+    {
+      "id": "gcp-storage-public-access",
+      "severity": "CRITICAL",
+      "description": "GCP Storage Bucket allows public access",
+      "condition": {
+        "type": "equals",
+        "attribute": "uniform_bucket_level_access",
+        "value": false
+      },
+      "impact": "Bucket contents may be publicly accessible",
+      "resolution": "Enable uniform bucket-level access and review IAM bindings",
+      "cis_reference": "CIS GCP 5.1"
+    },
+    {
+      "id": "gcp-storage-encryption-disabled",
+      "severity": "HIGH",
+      "description": "Storage Bucket does not use customer-managed encryption",
+      "condition": {
+        "type": "missing",
+        "attribute": "encryption"
+      },
+      "impact": "Data encrypted with Google-managed keys only",
+      "resolution": "Use customer-managed encryption keys (CMEK)",
+      "cis_reference": "CIS GCP 5.2"
+    }
+  ],
+  "google_compute_firewall": [
+    {
+      "id": "gcp-firewall-unrestricted-ssh",
+      "severity": "CRITICAL",
+      "description": "Firewall rule allows unrestricted SSH from internet",
+      "condition": {
+        "type": "contains",
+        "attribute": "source_ranges",
+        "value": "0.0.0.0/0"
+      },
+      "impact": "SSH exposed to all of internet",
+      "resolution": "Restrict source_ranges to trusted IP addresses",
+      "cis_reference": "CIS GCP 3.1"
+    },
+    {
+      "id": "gcp-firewall-unrestricted-rdp",
+      "severity": "CRITICAL",
+      "description": "Firewall rule allows unrestricted RDP from internet",
+      "condition": {
+        "type": "contains",
+        "attribute": "source_ranges",
+        "value": "0.0.0.0/0"
+      },
+      "impact": "RDP exposed to all of internet",
+      "resolution": "Restrict source_ranges to trusted IP addresses",
+      "cis_reference": "CIS GCP 3.2"
+    }
+  ],
+  "google_sql_database_instance": [
+    {
+      "id": "gcp-sql-public-ip",
+      "severity": "CRITICAL",
+      "description": "Cloud SQL instance has public IP enabled",
+      "condition": {
+        "type": "equals",
+        "attribute": "settings.ip_configuration.ipv4_enabled",
+        "value": true
+      },
+      "impact": "Database accessible from public internet",
+      "resolution": "Disable public IP and use private IP or Cloud SQL Proxy",
+      "cis_reference": "CIS GCP 6.1"
+    },
+    {
+      "id": "gcp-sql-backup-disabled",
+      "severity": "MEDIUM",
+      "description": "Cloud SQL instance does not have automated backups",
+      "condition": {
+        "type": "equals",
+        "attribute": "settings.backup_configuration.enabled",
+        "value": false
+      },
+      "impact": "Cannot recover from data loss",
+      "resolution": "Enable automated backups",
+      "cis_reference": "CIS GCP 6.2"
+    }
+  ],
+  "google_container_cluster": [
+    {
+      "id": "gcp-gke-legacy-auth",
+      "severity": "HIGH",
+      "description": "GKE cluster uses legacy authentication",
+      "condition": {
+        "type": "missing",
+        "attribute": "master_auth.client_certificate_config"
+      },
+      "impact": "Cluster uses less secure authentication mechanisms",
+      "resolution": "Disable legacy authentication and use workload identity",
+      "cis_reference": "CIS GCP 7.1"
+    },
+    {
+      "id": "gcp-gke-network-policy-disabled",
+      "severity": "MEDIUM",
+      "description": "GKE cluster does not have network policy enabled",
+      "condition": {
+        "type": "equals",
+        "attribute": "network_policy.enabled",
+        "value": false
+      },
+      "impact": "Pods can communicate without restrictions",
+      "resolution": "Enable network policy for pod-to-pod traffic control",
+      "cis_reference": "CIS GCP 7.2"
+    }
+  ]
+}
